@@ -1,0 +1,36 @@
+{
+  "name": "personail",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PersoNail mobile H5 demo monorepo for 3D nail try-on, DIY, AI recommendation, and store conversion.",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev -w apps/h5-main",
+    "dev:h5": "npm run dev -w apps/h5-main",
+    "dev:ai": "npm run dev -w apps/ai-gateway",
+    "dev:mock": "npm run dev -w apps/mock-server",
+    "build": "npm run build -w packages/types && npm run build -w packages/telemetry && npm run build -w apps/h5-main",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}
