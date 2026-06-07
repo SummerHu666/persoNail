@@ -1,381 +1,159 @@
 import {
-  CalendarCheck,
-  Camera,
-  Gem,
-  Home,
-  MapPin,
-  Palette,
-  Sparkles,
-  Wand2
+  Camera, CheckCircle2, Clock3, Heart, Home, MapPin, Search,
+  SlidersHorizontal, Sparkles, Store, UserRound
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { telemetry } from "@personail/telemetry";
-import type { HandParams, NailStyle } from "@personail/types";
-import { stores, styles, topic } from "../data/mock";
+import type { NailStyle } from "@personail/types";
+import { stores, styles } from "../data/mock";
 import { usePersonailStore } from "../state/usePersonailStore";
 
-const navItems = [
-  { key: "home", label: "首页", icon: Home },
-  { key: "tryon", label: "试戴", icon: Camera },
-  { key: "diy", label: "DIY", icon: Palette },
-  { key: "recommend", label: "推荐", icon: Sparkles },
-  { key: "stores", label: "门店", icon: MapPin }
-] as const;
+const images = [
+  "https://images.unsplash.com/photo-1519014816548-bf5fe059798b?w=600&q=80",
+  "https://images.unsplash.com/photo-1571290274554-6a2eaa771e5f?w=600&q=80",
+  "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80",
+  "https://images.unsplash.com/photo-1604654894611-6973b376cbde?w=600&q=80",
+  "https://images.unsplash.com/photo-1588359953494-0c215e3cedc6?w=600&q=80",
+  "https://images.unsplash.com/photo-1588015810531-dd522c9c8bbb?w=600&q=80"
+];
+const categories = ["推荐", "通勤", "显白", "短甲友好", "法式", "猫眼", "纯色", "渐变", "约会", "附近可做"];
+type MainView = "home" | "tryon" | "stores" | "my";
 
 export function App() {
-  const { view, setView } = usePersonailStore();
-
+  const [mainView, setMainView] = useState<MainView>("home");
   return (
     <main className="app-shell">
       <section className="phone-frame">
-        {view === "home" && <HomeView />}
-        {view === "tryon" && <TryOnView />}
-        {view === "diy" && <DiyView />}
-        {view === "recommend" && <RecommendView />}
-        {view === "stores" && <StoresView />}
-        <nav className="bottom-nav" aria-label="PersoNail sections">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={view === item.key ? "active" : ""}
-                key={item.key}
-                onClick={() => {
-                  if (item.key === "tryon") telemetry.track("enter_tryon");
-                  setView(item.key);
-                }}
-                title={item.label}
-              >
-                <Icon size={19} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        {mainView === "home" && <HomePage onTryOn={() => setMainView("tryon")} />}
+        {mainView === "tryon" && <TryOnPage />}
+        {mainView === "stores" && <StoresPage />}
+        {mainView === "my" && <MyPage />}
+        <BottomNav active={mainView} onChange={setMainView} />
       </section>
     </main>
   );
 }
 
-function HomeView() {
-  const { setActiveStyle, setView } = usePersonailStore();
+function HomePage({ onTryOn }: { onTryOn: () => void }) {
+  const { setActiveStyle } = usePersonailStore();
+  const [selectedCategory, setSelectedCategory] = useState("推荐");
+  const [query, setQuery] = useState("");
+  const visibleStyles = useMemo(() => styles.filter((style) => {
+    const categoryMatch = selectedCategory === "推荐" || selectedCategory === "附近可做" || style.tags.includes(selectedCategory);
+    return categoryMatch && `${style.title}${style.tags.join("")}`.includes(query.trim());
+  }), [query, selectedCategory]);
+
+  const openStyle = (style: NailStyle) => {
+    setActiveStyle(style);
+    telemetry.track("switch_style", { styleId: style.id });
+    onTryOn();
+  };
 
   return (
-    <ViewScaffold eyebrow="PersoNail" title="3D 美甲试戴与智能运营 Demo">
-      <section className="hero-panel">
-        <div>
-          <p>从内容种草到门店预约，一条链路跑通。</p>
-          <button
-            className="primary-action"
-            onClick={() => {
-              telemetry.track("enter_tryon");
-              setView("tryon");
-            }}
-          >
-            <Camera size={18} />
-            开始试戴
-          </button>
+    <Page>
+      <header className="pn-header">
+        <div className="pn-header-row">
+          <h1>PersoNail</h1>
+          <span className="pn-location"><MapPin size={15} />北京 朝阳</span>
         </div>
-        <div className="hero-nails" aria-hidden="true">
-          {styles.slice(0, 4).map((style) => (
-            <span key={style.id} style={{ background: style.cover }} />
-          ))}
-        </div>
-      </section>
-
-      <SectionTitle icon={Gem} title="热门款式" />
-      <div className="style-grid">
-        {styles.map((style) => (
-          <StyleCard
-            key={style.id}
-            style={style}
-            onClick={() => {
-              setActiveStyle(style);
-              telemetry.track("switch_style", { styleId: style.id });
-              setView("tryon");
-            }}
-          />
-        ))}
-      </div>
-
-      <SectionTitle icon={Wand2} title={topic.title} />
-      <div className="topic-strip">
-        <strong>{topic.subtitle}</strong>
-        {topic.copywriting.map((copy) => (
-          <span key={copy}>{copy}</span>
-        ))}
-      </div>
-    </ViewScaffold>
-  );
-}
-
-function TryOnView() {
-  const { activeStyle, handParams, updateHandParam, setActiveStyle, setView } = usePersonailStore();
-  const controls: Array<[keyof HandParams, string]> = [
-    ["fingerSlim", "指型"],
-    ["fingerLength", "指长"],
-    ["handWidth", "掌宽"],
-    ["nailLength", "甲长"],
-    ["skinTone", "肤色"]
-  ];
-
-  return (
-    <ViewScaffold eyebrow="Try-on" title="实时试戴">
-      <section className="tryon-stage">
-        <div className="hand-preview">
-          <div className="hand-palm" />
-          {[0, 1, 2, 3, 4].map((finger) => (
-            <span
-              className="finger"
-              key={finger}
-              style={{
-                height: `${82 + handParams.fingerLength * 28 - Math.abs(finger - 2) * 10}px`,
-                width: `${22 + (1 - handParams.fingerSlim) * 8}px`,
-                left: `${38 + finger * 34}px`
-              }}
-            >
-              <i
-                style={{
-                  background: activeStyle.material_config.baseColor,
-                  boxShadow: `0 0 ${8 + activeStyle.material_config.glitter * 18}px rgba(255,255,255,.9)`
-                }}
-              />
-            </span>
-          ))}
-        </div>
-        <div className="stage-actions">
-          <button
-            onClick={() => {
-              telemetry.track("change_env", { envId: "daylight" });
-            }}
-            title="切换环境"
-          >
-            <Sparkles size={18} />
-          </button>
-          <button title="截图">
-            <Camera size={18} />
-          </button>
-        </div>
-      </section>
-
-      <div className="quick-style-row">
-        {styles.map((style) => (
-          <button
-            className={activeStyle.id === style.id ? "selected" : ""}
-            key={style.id}
-            onClick={() => {
-              setActiveStyle(style);
-              telemetry.track("switch_style", { styleId: style.id });
-            }}
-            title={style.title}
-          >
-            <span style={{ background: style.cover }} />
-          </button>
-        ))}
-      </div>
-
-      <section className="control-panel">
-        {controls.map(([key, label]) => (
-          <label key={key}>
-            <span>{label}</span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={handParams[key]}
-              onChange={(event) => {
-                updateHandParam(key, Number(event.target.value));
-                telemetry.track("adjust_morph", { param: key, value: Number(event.target.value) });
-              }}
-            />
-          </label>
-        ))}
-      </section>
-
-      <button className="primary-action full" onClick={() => setView("diy")}>
-        <Palette size={18} />
-        继续 DIY
-      </button>
-    </ViewScaffold>
-  );
-}
-
-function DiyView() {
-  const { activeStyle, applyStyleConfig, saveDesign } = usePersonailStore();
-  const config = activeStyle.material_config;
-
-  return (
-    <ViewScaffold eyebrow="DIY" title="材质与贴纸">
-      <section className="diy-preview" style={{ background: activeStyle.cover }}>
-        <span>Base</span>
-        <strong>{activeStyle.title}</strong>
-      </section>
-      <div className="swatches">
-        {["#D8BFA8", "#B7355C", "#F7EDE4", "#8EDCCB", "#A76573", "#2E3438"].map((color) => (
-          <button
-            key={color}
-            style={{ backgroundColor: color }}
-            onClick={() => applyStyleConfig({ ...config, baseColor: color })}
-            title={color}
-          />
-        ))}
-      </div>
-      <section className="control-panel">
-        {[
-          ["roughness", "雾面"],
-          ["metallic", "金属"],
-          ["glitter", "亮片"],
-          ["catEye", "猫眼"]
-        ].map(([key, label]) => {
-          const value = key === "catEye" ? config.catEye.strength : config[key as keyof typeof config];
-          return (
-            <label key={key}>
-              <span>{label}</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={Number(value)}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  applyStyleConfig(
-                    key === "catEye"
-                      ? { ...config, catEye: { ...config.catEye, strength: next } }
-                      : { ...config, [key]: next }
-                  );
-                }}
-              />
-            </label>
-          );
-        })}
-      </section>
-      <button
-        className="primary-action full"
-        onClick={() => {
-          const design = saveDesign();
-          telemetry.track("save_design", { designId: design.id });
-        }}
-      >
-        <Gem size={18} />
-        保存方案
-      </button>
-    </ViewScaffold>
-  );
-}
-
-function RecommendView() {
-  const { setActiveStyle, setView } = usePersonailStore();
-  const recommendations = styles.map((style, index) => ({
-    style,
-    score: 98 - index * 4,
-    reason: `${style.tags[0]}风格与你当前甲长和肤色参数匹配，适合直接试戴。`
-  }));
-
-  return (
-    <ViewScaffold eyebrow="AI Recommend" title="适合你的款式">
-      <div className="recommend-list">
-        {recommendations.map(({ style, score, reason }) => (
-          <article className="recommend-card" key={style.id}>
-            <div className="recommend-cover" style={{ background: style.cover }} />
-            <div>
-              <div className="row-between">
-                <strong>{style.title}</strong>
-                <span>{score}</span>
-              </div>
-              <p>{reason}</p>
-              <button
-                onClick={() => {
-                  setActiveStyle(style);
-                  telemetry.track("click_recommend_card", { styleId: style.id, score });
-                  setView("tryon");
-                }}
-              >
-                应用
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </ViewScaffold>
-  );
-}
-
-function StoresView() {
-  const { activeStyle } = usePersonailStore();
-
-  return (
-    <ViewScaffold eyebrow="Stores" title="附近可做门店">
-      <div className="store-list">
-        {stores.map((store) => (
-          <article className="store-card" key={store.id}>
-            <div className="row-between">
-              <strong>{store.name}</strong>
-              <span>{store.distance}</span>
-            </div>
-            <p>
-              {store.rating} 分 · {store.priceRange}
-            </p>
-            <div className="tag-row">
-              {store.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-            <button
-              className="primary-action full"
-              onClick={() => {
-                telemetry.track("click_store", { storeId: store.id });
-                telemetry.track("create_booking", { storeId: store.id, styleId: activeStyle.id });
-                window.alert(`已为你预约 ${store.name} 的 ${activeStyle.title}`);
-              }}
-            >
-              <CalendarCheck size={18} />
-              预约同款
-            </button>
-          </article>
-        ))}
-      </div>
-    </ViewScaffold>
-  );
-}
-
-function ViewScaffold({
-  eyebrow,
-  title,
-  children
-}: {
-  eyebrow: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="view">
-      <header className="view-header">
-        <span>{eyebrow}</span>
-        <h1>{title}</h1>
+        <label className="pn-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索款式、颜色、风格" /></label>
       </header>
-      {children}
-    </div>
+      <div className="pn-content">
+        <section className="pn-hero-card">
+          <div className="pn-hero-copy">
+            <h2>先试上手，再决定做哪款</h2>
+            <p>上传一次手部照片，AI 会根据甲型、肤色和光线生成真实试戴效果。</p>
+            <button className="pn-button primary" onClick={onTryOn}>开始 AI 试戴</button>
+            <button className="pn-button plain" onClick={onTryOn}>查看我的手模</button>
+          </div>
+          <div className="pn-hero-icon"><Sparkles size={38} /></div>
+        </section>
+        <div className="pn-quick-grid">
+          <QuickAction icon={<Camera />} title="拍手" subtitle="/ 保存手模" onClick={onTryOn} />
+          <QuickAction icon={<Heart />} title="选款" subtitle="/ 热门同款" onClick={() => setSelectedCategory("推荐")} />
+          <QuickAction icon={<SlidersHorizontal />} title="试戴" subtitle="/ 实时调参" onClick={onTryOn} />
+        </div>
+        <div className="pn-chip-scroll">
+          {categories.map((category) => <button key={category} className={`pn-chip ${selectedCategory === category ? "active" : ""}`} onClick={() => setSelectedCategory(category)}>{category}</button>)}
+        </div>
+        <div className="pn-style-grid">
+          {visibleStyles.map((style) => <StyleCard key={style.id} style={style} onClick={() => openStyle(style)} />)}
+        </div>
+      </div>
+    </Page>
   );
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+function TryOnPage() {
+  const { activeStyle, setActiveStyle, handParams, updateHandParam, saveDesign } = usePersonailStore();
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
   return (
-    <h2 className="section-title">
-      <Icon size={18} />
-      {title}
-    </h2>
+    <Page>
+      <header className="pn-header">
+        <h1>AI 试戴</h1>
+        <p>用你的手模快速预览任意款式</p>
+      </header>
+      <div className="pn-content">
+        <section className="pn-card">
+          <div className="pn-card-head"><div><h2>已保存手模</h2><p>最近更新：今天 14:30</p></div><div className="pn-small-icon"><Sparkles /></div></div>
+          <div className="pn-ai-metrics"><Metric label="甲型识别" value="椭圆形甲" /><Metric label="肤色区间" value="冷白皮" /></div>
+          <button className="pn-button secondary" onClick={() => setEditing((value) => !value)}>{editing ? "收起实时调参" : "实时调整手模"}</button>
+          {editing && <div className="pn-controls">
+            <Slider label="甲片长度" value={handParams.nailLength} onChange={(value) => updateHandParam("nailLength", value)} />
+            <Slider label="肤色" value={handParams.skinTone} onChange={(value) => updateHandParam("skinTone", value)} />
+          </div>}
+        </section>
+        <SectionTitle title="最近试戴" action={<Clock3 size={18} />} />
+        <div className="pn-style-grid pn-recent-grid">
+          {styles.slice(0, 2).map((style) => <StyleCard key={style.id} style={style} compact onClick={() => setActiveStyle(style)} />)}
+        </div>
+        <section className="pn-notice"><div className="pn-small-icon"><Heart /></div><div><h2>继续上次试戴</h2><p>{activeStyle.title} · 已完成调参</p><button onClick={() => setEditing(true)}>继续编辑</button></div></section>
+        <SectionTitle title="可试戴款式" />
+        <div className="pn-style-grid">
+          {styles.slice(2).map((style, index) => <StyleCard key={style.id} style={style} badge={index === 0 ? "最近浏览" : index === 1 ? "收藏" : "热门"} onClick={() => setActiveStyle(style)} />)}
+        </div>
+        <button className="pn-button primary pn-save" onClick={() => {
+          const design = saveDesign(); telemetry.track("save_design", { designId: design.id }); setSaved(true);
+        }}>{saved ? "方案已保存" : `保存「${activeStyle.title}」方案`}</button>
+      </div>
+    </Page>
   );
 }
 
-function StyleCard({ style, onClick }: { style: NailStyle; onClick: () => void }) {
-  return (
-    <button className="style-card" onClick={onClick}>
-      <span className="style-cover" style={{ background: style.cover }} />
-      <strong>{style.title}</strong>
-      <small>{style.tags.join(" · ")}</small>
-    </button>
-  );
+function StoresPage() {
+  const [booked, setBooked] = useState<string>();
+  return <Page><header className="pn-header"><h1>附近门店</h1><p>按距离为你推荐可做同款的门店</p></header><div className="pn-content">
+    <div className="pn-sort-row"><button className="active">距离</button><button>评分</button><button>名称</button></div>
+    <h2 className="pn-group-title">支持 AI 试戴 <span>{stores.length} 家</span></h2>
+    <div className="pn-store-list">{stores.map((store, index) => <article className="pn-store-card" key={store.id}>
+      <img src={images[(index + 2) % images.length]} alt="" /><div className="pn-store-body"><div className="pn-card-head"><h3>{store.name}</h3><strong>★ {store.rating}</strong></div><p>{store.distance} · 营业至 22:00</p>
+      <div className="pn-tag-row">{store.tags.map((tag) => <span key={tag}>{tag}</span>)}</div><button className="pn-button store-book" onClick={() => setBooked(store.id)}>{booked === store.id ? "预约申请已发送" : "立即预约"}</button></div>
+    </article>)}</div>
+  </div></Page>;
 }
+
+function MyPage() {
+  const { savedDesigns } = usePersonailStore();
+  const cards = savedDesigns.length ? savedDesigns : [{ id: "demo", title: "白月光通勤款", created_at: "今天 14:30" }];
+  return <Page><header className="pn-header"><h1>我的</h1></header><div className="pn-content">
+    <section className="pn-card pn-user"><div className="pn-avatar"><UserRound /></div><div><h2>美甲爱好者</h2><p>已保存 {cards.length} 个方案</p></div></section>
+    <SectionTitle title="我的方案" />
+    <div className="pn-solution-list">{cards.map((item, index) => <article className="pn-solution-card" key={item.id}><img src={images[index % images.length]} alt="" /><div><div className="pn-card-head"><h3>{item.title}</h3><CheckCircle2 size={18} /></div><p>{"created_at" in item ? item.created_at : "今天"}</p><div className="pn-tag-row"><span>1 款式</span><span>适配度 92%</span></div><small>未预约门店</small></div></article>)}</div>
+  </div></Page>;
+}
+
+function BottomNav({ active, onChange }: { active: MainView; onChange: (view: MainView) => void }) {
+  const tabs = [{ key: "home", label: "款式", icon: <Home /> }, { key: "tryon", label: "AI试戴", icon: <Sparkles /> }, { key: "stores", label: "门店", icon: <Store /> }, { key: "my", label: "我的", icon: <UserRound /> }] as const;
+  return <nav className="pn-bottom-nav">{tabs.map((tab) => <button key={tab.key} className={active === tab.key ? "active" : ""} onClick={() => onChange(tab.key)}>{tab.icon}<span>{tab.label}</span></button>)}</nav>;
+}
+function Page({ children }: { children: ReactNode }) { return <div className="pn-page">{children}</div>; }
+function QuickAction({ icon, title, subtitle, onClick }: { icon: ReactNode; title: string; subtitle: string; onClick: () => void }) { return <button className="pn-quick-action" onClick={onClick}>{icon}<div><strong>{title}</strong><span> {subtitle}</span></div></button>; }
+function SectionTitle({ title, action }: { title: string; action?: ReactNode }) { return <div className="pn-section-title"><h2>{title}</h2>{action}</div>; }
+function StyleCard({ style, compact, badge, onClick }: { style: NailStyle; compact?: boolean; badge?: string; onClick: () => void }) {
+  const index = styles.findIndex((item) => item.id === style.id);
+  return <button className="pn-style-card" onClick={onClick}><div className={`pn-style-image ${compact ? "compact" : ""}`}><img src={images[index]} alt={style.title} />{badge && <span>{badge}</span>}</div><div className="pn-style-body"><h3>{style.title}</h3>{!compact && <div className="pn-price-row"><strong>¥{138 + index * 20}</strong><span>{(0.3 + index * .2).toFixed(1)}km 有门店</span></div>}<div className="pn-tag-row">{style.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}</div></div></button>;
+}
+function Metric({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
+function Slider({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <label className="pn-slider"><span>{label}<b>{Math.round(value * 100)}%</b></span><input type="range" min="0" max="1" step=".01" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
