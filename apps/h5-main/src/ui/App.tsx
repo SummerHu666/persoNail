@@ -8,6 +8,7 @@ import { telemetry } from "@personail/telemetry";
 import type { NailStyle } from "@personail/types";
 import { stores, styles } from "../data/mock";
 import { usePersonailStore } from "../state/usePersonailStore";
+import { Canvas3D } from "./Canvas3D"; // <-- 引入 3D 画布组件
 
 const images = [
   "https://images.unsplash.com/photo-1519014816548-bf5fe059798b?w=600&q=80",
@@ -85,26 +86,79 @@ function HomePage({ onTryOn }: { onTryOn: () => void }) {
   );
 }
 
+// ----------------------------------------------------
+// 【重点修改】AI 试戴页：融合了 3D 画布与底层 UI 参数
+// ----------------------------------------------------
 function TryOnPage() {
   const { activeStyle, setActiveStyle, handParams, updateHandParam, saveDesign } = usePersonailStore();
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [envRot, setEnvRot] = useState(0);
+
+  // 猫眼方向 + 环境光角度联动
+  const handleChangeDirection = (x: number, y: number, envAngle?: number) => {
+    const engine = (window as any).NailEngine;
+    if (engine) {
+      engine.updateCatEyeDirection(x, y);
+      if (envAngle !== undefined) {
+        engine.setEnvRotation(envAngle);
+        setEnvRot(envAngle / (Math.PI * 2));
+      }
+    }
+  };
+
   return (
     <Page>
-      <header className="pn-header">
-        <h1>AI 试戴</h1>
-        <p>用你的手模快速预览任意款式</p>
-      </header>
-      <div className="pn-content">
+      {/* 3D 渲染区域：占据屏幕上半部分 */}
+      <div style={{ position: 'relative', width: '100%', height: '45vh', backgroundColor: '#e8e8e8', overflow: 'hidden' }}>
+        <Canvas3D />
+        
+        {/* 悬浮在 3D 画布右下角的磁吸按钮 + 光照旋转滑块 */}
+        <div style={{ position: 'absolute', bottom: '25px', right: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={btnStyle} onClick={() => handleChangeDirection(1, 0, 0)}>竖光</button>
+            <button style={btnStyle} onClick={() => handleChangeDirection(0, 1, Math.PI / 2)}>横光</button>
+            <button style={btnStyle} onClick={() => handleChangeDirection(1, -1, Math.PI / 4)}>斜光</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.6)', borderRadius: '20px', padding: '6px 14px', backdropFilter: 'blur(4px)' }}>
+            <span style={{ color: 'white', fontSize: '12px', whiteSpace: 'nowrap' }}>光照旋转</span>
+            <input type="range" min="0" max="1" step=".01" value={envRot}
+              onChange={(e) => { const v = Number(e.target.value); setEnvRot(v); (window as any).NailEngine?.setEnvRotation(v * Math.PI * 2); }}
+              style={{ width: '80px', accentColor: '#D4AF37' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* 交互面板区域：利用圆角和负边距，制造抽屉悬浮覆盖的效果 */}
+      <div className="pn-content" style={{ 
+          marginTop: '-20px', 
+          position: 'relative', 
+          zIndex: 12, 
+          backgroundColor: '#f5f5f5', // 适配你的底色
+          borderRadius: '20px 20px 0 0', 
+          paddingTop: '20px', 
+          minHeight: '60vh',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.05)'
+      }}>
         <section className="pn-card">
           <div className="pn-card-head"><div><h2>已保存手模</h2><p>最近更新：今天 14:30</p></div><div className="pn-small-icon"><Sparkles /></div></div>
           <div className="pn-ai-metrics"><Metric label="甲型识别" value="椭圆形甲" /><Metric label="肤色区间" value="冷白皮" /></div>
           <button className="pn-button secondary" onClick={() => setEditing((value) => !value)}>{editing ? "收起实时调参" : "实时调整手模"}</button>
+          
           {editing && <div className="pn-controls">
-            <Slider label="甲片长度" value={handParams.nailLength} onChange={(value) => updateHandParam("nailLength", value)} />
-            <Slider label="肤色" value={handParams.skinTone} onChange={(value) => updateHandParam("skinTone", value)} />
+            {/* 这里的滑块改变状态后，3D 引擎可以监听到并驱动形变 */}
+            <Slider label="甲片长度" value={handParams.nailLength} onChange={(value) => {
+              updateHandParam("nailLength", value);
+              const engine = (window as any).NailEngine;
+              if (engine) for (let i = 1; i <= 5; i++) engine.setNailLength(i, value);
+            }} />
+            <Slider label="肤色" value={handParams.skinTone} onChange={(value) => {
+              updateHandParam("skinTone", value);
+              (window as any).NailEngine?.setSkinTone(value);
+            }} />
           </div>}
         </section>
+
         <SectionTitle title="最近试戴" action={<Clock3 size={18} />} />
         <div className="pn-style-grid pn-recent-grid">
           {styles.slice(0, 2).map((style) => <StyleCard key={style.id} style={style} compact onClick={() => setActiveStyle(style)} />)}
@@ -121,6 +175,19 @@ function TryOnPage() {
     </Page>
   );
 }
+
+// 给测试按钮写一个极简暗色半透明风格
+const btnStyle = {
+  padding: '6px 12px',
+  border: '1px solid rgba(255,255,255,0.2)',
+  borderRadius: '20px',
+  background: 'rgba(0,0,0,0.6)',
+  color: 'white',
+  fontSize: '12px',
+  backdropFilter: 'blur(4px)',
+  cursor: 'pointer'
+};
+// ----------------------------------------------------
 
 function StoresPage() {
   const [booked, setBooked] = useState<string>();
